@@ -20,7 +20,11 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <iso646.h>
+
 #include "lc3vm.h"
+
+void except(uint16_t i);
 
 /// declarations of memory and registers used in the microprogram simulator
 uint16_t mem[UINT16_MAX + 1] = {0};
@@ -49,9 +53,16 @@ uint16_t PC_START = 0x3000;
  */
 uint16_t mem_read(uint16_t address)
 {
+
+  if (is_user_mode() and (address < 0x3000 or address > 0xFDFF))
+  {
+    except(0x02); // access control violation
+    return 0x0000;
+  }
+
   if (address == KBDR_ADDR) // if address is KBDR_ADDR
     iomap[KBSR] &= 0x7FFF;  //     clear KBSR[15]
-  return mem[address]; 
+  return mem[address];
 }
 
 /** @brief memory write, transfer to memory
@@ -71,9 +82,15 @@ uint16_t mem_read(uint16_t address)
  */
 void mem_write(uint16_t address, uint16_t val)
 {
+  if (is_user_mode() and (address < 0x3000 or address > 0xFDFF))
+  {
+    except(0x02); // access control violation
+    return;
+  }
+
   if (address == DDR_ADDR) // if address is DDR_ADDR
     iomap[DSR] &= 0x7FFF;  //     clear DSR[15]
-  mem[address] = val; 
+  mem[address] = val;
 }
 
 /** @brief sign extend bits
@@ -463,10 +480,18 @@ void jsr(uint16_t i)
  */
 void rti(uint16_t i)
 {
-  reg[PSR] = mem_read(reg[R6]); // PSR = mem[R6], PSR is restored
+
+  if (is_user_mode()) // if (PSR[15] == 1) then the user mode can't invoke rti
+  {
+    except(0x00); // privilege mode exception
+    return;
+  }
+
+  uint16_t restored_psr = mem_read(reg[R6]); // PSR = mem[R6], PSR is restored
   pop();
   reg[RPC] = mem_read(reg[R6]); // PC = mem[R6], PC is restored
   pop();
+  reg[PSR] = restored_psr;
 
   if (is_user_mode()) // if (PSR[15] == 1), mode switch back to user mode
   {
@@ -485,7 +510,10 @@ void rti(uint16_t i)
  *   destination and source register operands, and to extract the
  *   second source register or the immediate value encoded in the
  */
-void res(uint16_t i) {}
+void res(uint16_t i)
+{
+  except(0x01); // illegal opcode exception
+}
 
 /** @brief trap instruction
  *
@@ -887,3 +915,18 @@ bool is_running()
  *   the exception vector number we use to index into the exception service
  *   vector table.
  */
+void except(uint16_t i)
+{
+  uint16_t temp = reg[PSR]; // TEMP = PSR
+
+  if (is_user_mode()) // if (PSR[15] == 1)
+  {
+    reg[USP] = reg[R6]; // USP = R6
+    reg[R6] = reg[SSP]; // R6 = SSP
+    supervisor_mode();  // PSR[15] = 0
+  }
+
+  push(reg[RPC]);                       // push PC
+  push(temp);                           // push TEMP (original PSR)
+  reg[RPC] = mem_read(0x0100 + TRP(i)); // PC = mem[exception vector + 0x0100]
+}
