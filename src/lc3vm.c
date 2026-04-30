@@ -48,9 +48,7 @@ uint16_t PC_START = 0x3000;
  *   simply reads and returns the 16 bits stored at the indicated address.
  */
 uint16_t mem_read(uint16_t address)
-{
-  return mem[address];
-}
+{ return mem[address]; }
 
 /** @brief memory write, transfer to memory
  *
@@ -68,9 +66,7 @@ uint16_t mem_read(uint16_t address)
  *   character, or some other type of data.
  */
 void mem_write(uint16_t address, uint16_t val)
-{
-  mem[address] = val;
-}
+{ mem[address] = val; }
 
 /** @brief sign extend bits
  *
@@ -324,9 +320,7 @@ void ldr(uint16_t i)
  *   second source register or the immediate value encoded in the
  */
 void lea(uint16_t i)
-{
-  reg[DR(i)] = reg[RPC] + PCOFF9(i);
-}
+{ reg[DR(i)] = reg[RPC] + PCOFF9(i); }
 
 /** @brief store to PC + offset
  *
@@ -342,9 +336,7 @@ void lea(uint16_t i)
  *   second source register or the immediate value encoded in the
  */
 void st(uint16_t i)
-{
-  mem_write(reg[RPC] + PCOFF9(i), reg[DR(i)]);
-}
+{ mem_write(reg[RPC] + PCOFF9(i), reg[DR(i)]); }
 
 /** @brief store indirect
  *
@@ -361,9 +353,7 @@ void st(uint16_t i)
  *   second source register or the immediate value encoded in the
  */
 void sti(uint16_t i)
-{
-  mem_write(mem_read(reg[RPC] + PCOFF9(i)), reg[DR(i)]);
-}
+{ mem_write(mem_read(reg[RPC] + PCOFF9(i)), reg[DR(i)]); }
 
 /** @brief store offset relative to base address
  *
@@ -379,9 +369,7 @@ void sti(uint16_t i)
  *   second source register or the immediate value encoded in the
  */
 void str(uint16_t i)
-{
-  mem_write(reg[SR1(i)] + OFF6(i), reg[DR(i)]);
-}
+{ mem_write(reg[SR1(i)] + OFF6(i), reg[DR(i)]); }
 
 /** @brief jump unconditionally
  *
@@ -395,9 +383,7 @@ void str(uint16_t i)
  *   second source register or the immediate value encoded in the
  */
 void jmp(uint16_t i)
-{
-  reg[RPC] = reg[SR1(i)];
-}
+{ reg[RPC] = reg[SR1(i)]; }
 
 /** @brief conditional branch
  *
@@ -744,17 +730,26 @@ void ld_img(char* fname)
  *   in supervisor mode (bit 15 is 0).
  */
 
+bool is_user_mode()
+{ return (reg[PSR] >> 15) & 1; }
+
 /** @brief set user mode
  *
  * Set the machine into user mode.  This function sets bit 15 to be 1 to indicate
  * that we are now running in the less privileged user mode.
  */
 
+void user_mode()
+{ reg[PSR] |= 0x8000; }
+
 /** @brief set supervisor mode
  *
  * Set the machine into supervisor mode.  This function sets bit 15 to be 0
  * to indicate that we are now running in the more privileged supervisor mode.
  */
+
+void supervisor_mode()
+{ reg[PSR] &= 0x7FFF; }
 
 /** @brief get priority
  *
@@ -766,6 +761,9 @@ void ld_img(char* fname)
  *   0 - 7 are possible
  */
 
+uint16_t priority()
+{ return (reg[PSR] >> 8) & 0x7; }
+
 /** @brief set priority
  *
  * Set the priority in the PSR to the indicated priority level.  We
@@ -776,6 +774,12 @@ void ld_img(char* fname)
  *   it is undefined what happens if a value not in this range is set for the
  *   priority.
  */
+
+void set_priority(uint16_t p)
+{
+  reg[PSR] &= 0xF8FF;         // zero out bits [10:8] bits first
+  reg[PSR] |= (p & 0x7) << 8; // then OR in the new priority
+}
 
 /** @brief push value to current stack
  *
